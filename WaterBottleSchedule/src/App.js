@@ -10,11 +10,10 @@ class App extends Component {
     return (
       <div className="App">
         <div className="App-header">
+          <Header headerText="Water Bottle Schedule"></Header>
           <img src={logo} className="App-logo" alt="logo" />
-          <h2>Welcome to React</h2>
         </div>
         
-        <Header></Header>
         <Calendar></Calendar>
         <ManageEmployees></ManageEmployees>
       </div>

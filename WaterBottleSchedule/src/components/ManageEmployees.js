@@ -8,4 +8,4 @@ class ManageEmployees extends Component {
 	}
 }
 
-export default ManageEmployees
+export default ManageEmployees;
