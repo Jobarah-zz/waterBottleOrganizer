@@ -5,7 +5,7 @@ import Header from './components/Header';
 import Calendar from './components/Calendar';
 import ManageEmployees from './components/ManageEmployees';
 import base from './config/base';
-import employeesList from './config/employees';
+// import employeesList from './config/employees';
 
 class App extends Component {
 
@@ -17,7 +17,7 @@ class App extends Component {
     this.removeEmployee = this.removeEmployee.bind(this);
 
     this.state = {
-      employees: employeesList
+      employees: {}
     };
 
   }
@@ -26,15 +26,16 @@ class App extends Component {
      =|                     FIREBASE                             |=
      ============================================================== */
   componentWillMount() {
-    // this.ref = base.syncState('employees',
-    // {
-    //   context: this,
-    //   state: 'employees'
-    // });
+
+    this.ref = base.syncState('employees',
+    {
+      context: this,
+      state: 'employees'
+    });
   }
 
   componentWillUnMount() {
-    // base.removeBinding(this.ref);
+    base.removeBinding(this.ref);
   }
 
   /* ==============================================================
@@ -73,9 +74,7 @@ class App extends Component {
 
       const employees = {...this.state.employees};
 
-      //employees[key] = null;
-
-      delete employees[key];
+      employees[key] = null;
 
       this.setState({ employees });
   }
@@ -96,10 +95,10 @@ class App extends Component {
         <Calendar></Calendar>
 
         <ManageEmployees
-          addEmployee = { this.addEmployee }
-          employees = { this.state.employees }
-          updateEmployee = { this.updateEmployee }
-          removeEmployee = { this.removeEmployee }
+          addEmployee={ this.addEmployee }
+          employees={ this.state.employees }
+          updateEmployee={ this.updateEmployee }
+          removeEmployee={ this.removeEmployee }
         ></ManageEmployees>        
       </div>
     );
