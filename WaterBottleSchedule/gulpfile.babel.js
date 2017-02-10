@@ -153,8 +153,8 @@
     gulp.task('watch', () => {
 
         internals.isWatchify = true;
-        // gulp.watch(internals.src + '/css/**/*.css',['css']);
+        gulp.watch(internals.src + '/css/**/*.css',['css']);
     });
 
 // Main Tasks ===================================
-    gulp.task('default', ['connect', 'scripts', 'watch']);
+    gulp.task('default', ['connect', 'css','scripts', 'watch']);
