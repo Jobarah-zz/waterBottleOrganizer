@@ -51,7 +51,7 @@
             compact: false
         }));
 
-        if (path.basename(options.entries) === 'app.js') {
+        if (path.basename(options.entries) === 'index.js') {
             min = false;
             b.require(internals.deps)
         } else {
@@ -65,9 +65,10 @@
                 .on('error', (e) => {
                     gulp.src('').pipe(notify({
                         title: "SYNTAX ERROR",
-                        message: e.filename
+                        message: e.filename,
+                        sound: 'Funk',
+                        icon: path.join(__dirname, '/public/error.png')
                     }));
-                    console.log(e);
                 })
                 .pipe(source(options.output))
                 .pipe(buffer())
@@ -102,8 +103,8 @@
     //== Gulp JS task
     gulp.task('scripts', (callback) => {
 
-        const mainFiles = [`${internals.src}/App.js`];
-        const configFiles =  [`${internals.src}/config/*.js`]
+        const mainFiles = [`${internals.src}/components/index.js`];
+        // const configFiles =  [`${internals.src}/config/*.js`]
         glob(`${internals.src}/components/*.js`, (err, files) => {
 
             if (err) {
@@ -111,9 +112,7 @@
             }
 
             files = [...files, ...mainFiles];
-
             const tasks = files.map(function (entry, index) {
-                console.log(entry);
                 entry = path.normalize(entry);
                 const origin = path.normalize(`${ internals.src }/components`);
                 const dest = path.normalize(`${ internals.static }/dist/js`);
@@ -136,7 +135,7 @@
         
         connect.server({
         port: 3000,
-        root: './public/',
+        root: './',
         livereload: true
       });
     });

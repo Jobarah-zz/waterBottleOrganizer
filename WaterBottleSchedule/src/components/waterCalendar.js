@@ -1,8 +1,8 @@
 import React from 'react';
-import './index.css';
+// import './index.css';
 import BigCalendar from 'react-big-calendar';
 import moment from 'moment';
-import base from './config/base';
+import base from '../config/base';
 
 const initialDay = moment("2017-02-03");
 BigCalendar.momentLocalizer(moment);
