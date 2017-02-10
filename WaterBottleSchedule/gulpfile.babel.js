@@ -102,7 +102,7 @@
     //== Gulp JS task
     gulp.task('scripts', (callback) => {
 
-        const mainFiles = [`${internals.src}/js/app.js`];
+        const mainFiles = [`${internals.src}/App.js`];
         const configFiles =  [`${internals.src}/config/*.js`]
         glob(`${internals.src}/components/*.js`, (err, files) => {
 

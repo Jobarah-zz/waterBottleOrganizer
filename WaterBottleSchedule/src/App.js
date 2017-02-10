@@ -1,10 +1,10 @@
 import React, { Component } from 'react';
 import logo from './logo.svg';
-import './App.css';
+// import './App.css';
 import Header from './components/Header';
 import ManageEmployees from './components/ManageEmployees';
 import base from './config/base';
-import './index.css';
+// import './index.css';
 import BigCalendar from 'react-big-calendar';
 import moment from 'moment';
 // import employeesList from './config/employees';
