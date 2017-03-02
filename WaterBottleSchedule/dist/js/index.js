@@ -42098,7 +42098,7 @@ _reactBigCalendar2.default.momentLocalizer(_moment2.default);
 // import './App.css';
 
 
-var initialDay = new Date("Fri Feb 02 2017");
+var initialDay = new Date("Thu Mar 23 2017");
 
 var App = function (_Component) {
   (0, _inherits3.default)(App, _Component);
