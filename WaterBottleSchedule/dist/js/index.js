@@ -42236,6 +42236,7 @@ var App = function (_Component) {
     key: 'render',
     value: function render() {
       var events = this.parseEmployeesToEvents();
+
       return _react2.default.createElement(
         'div',
         { className: 'App' },
