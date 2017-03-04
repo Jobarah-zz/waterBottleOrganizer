@@ -1,5 +1,8 @@
 import React, { Component } from 'react';
+import { rules, Form, Input, Select, Textarea, Button } from 'react-validation/lib/build/validation.rc';
+import validations from './FormRules/FormValidations';
 // import '../css/ManageEmployees.css';
+Object.assign(rules, validations);
 
 class ManageEmployees extends Component {
 	constructor() {
@@ -81,11 +84,18 @@ class ManageEmployees extends Component {
 					</tbody>
 				</table>
 
-				<form onSubmit={(e) => this.createEmployee(e)}>
-					<input className="input-field" ref={input => this.username = input } type="text" placeholder="Employee Name" />
-					<input className="input-field" ref={input => this.email = input } type="text" placeholder="Employee Email" />
-					<input className="btn" type="submit" value="Add" />
-				</form>
+				<Form onSubmit={(e) => this.createEmployee(e)}>
+	                <div>
+	                    <label>
+	                        <Input className="input-field" ref={Input => this.username = Input } type="text" value="Employee Name" validations={['required', 'name']}/>
+	                    </label>
+	                </div>
+	                <div>
+	                    <label>
+	                        <Input className="input-field" value="email@email.com" ref={Input => this.email = Input } name="email" validations={['required', 'email']}/>
+	                    </label>
+	                </div>   
+				</Form>
 			</div>
 		);
 	}
