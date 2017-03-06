@@ -1293,6 +1293,635 @@ for(var collections = ['NodeList', 'DOMTokenList', 'MediaList', 'StyleSheetList'
   Iterators[NAME] = Iterators.Array;
 }
 },{"./_global":38,"./_hide":40,"./_iterators":49,"./_wks":82,"./es6.array.iterator":83}],96:[function(require,module,exports){
+'use strict';
+
+module.exports = {
+  number: require('./src/card-number'),
+  expirationDate: require('./src/expiration-date'),
+  expirationMonth: require('./src/expiration-month'),
+  expirationYear: require('./src/expiration-year'),
+  cvv: require('./src/cvv'),
+  postalCode: require('./src/postal-code')
+};
+
+},{"./src/card-number":97,"./src/cvv":98,"./src/expiration-date":99,"./src/expiration-month":100,"./src/expiration-year":101,"./src/postal-code":105}],97:[function(require,module,exports){
+'use strict';
+
+var luhn10 = require('./luhn-10');
+var getCardTypes = require('credit-card-type');
+
+function verification(card, isPotentiallyValid, isValid) {
+  return {card: card, isPotentiallyValid: isPotentiallyValid, isValid: isValid};
+}
+
+function cardNumber(value) {
+  var potentialTypes, cardType, isPotentiallyValid, isValid, i, maxLength;
+
+  if (typeof value === 'number') {
+    value = String(value);
+  }
+
+  if (typeof value !== 'string') { return verification(null, false, false); }
+
+  value = value.replace(/\-|\s/g, '');
+
+  if (!/^\d*$/.test(value)) { return verification(null, false, false); }
+
+  potentialTypes = getCardTypes(value);
+
+  if (potentialTypes.length === 0) {
+    return verification(null, false, false);
+  } else if (potentialTypes.length !== 1) {
+    return verification(null, true, false);
+  }
+
+  cardType = potentialTypes[0];
+
+  if (cardType.type === 'unionpay') {  // UnionPay is not Luhn 10 compliant
+    isValid = true;
+  } else {
+    isValid = luhn10(value);
+  }
+
+  maxLength = Math.max.apply(null, cardType.lengths);
+
+  for (i = 0; i < cardType.lengths.length; i++) {
+    if (cardType.lengths[i] === value.length) {
+      isPotentiallyValid = value.length !== maxLength || isValid;
+      return verification(cardType, isPotentiallyValid, isValid);
+    }
+  }
+
+  return verification(cardType, value.length < maxLength, false);
+}
+
+module.exports = cardNumber;
+
+},{"./luhn-10":103,"credit-card-type":107}],98:[function(require,module,exports){
+'use strict';
+
+var DEFAULT_LENGTH = 3;
+
+function includes(array, thing) {
+  var i = 0;
+
+  for (; i < array.length; i++) {
+    if (thing === array[i]) { return true; }
+  }
+
+  return false;
+}
+
+function max(array) {
+  var maximum = DEFAULT_LENGTH;
+  var i = 0;
+
+  for (; i < array.length; i++) {
+    maximum = array[i] > maximum ? array[i] : maximum;
+  }
+
+  return maximum;
+}
+
+function verification(isValid, isPotentiallyValid) {
+  return {isValid: isValid, isPotentiallyValid: isPotentiallyValid};
+}
+
+function cvv(value, maxLength) {
+  maxLength = maxLength || DEFAULT_LENGTH;
+  maxLength = maxLength instanceof Array ? maxLength : [maxLength];
+
+  if (typeof value !== 'string') { return verification(false, false); }
+  if (!/^\d*$/.test(value)) { return verification(false, false); }
+  if (includes(maxLength, value.length)) { return verification(true, true); }
+  if (value.length < Math.min.apply(null, maxLength)) { return verification(false, true); }
+  if (value.length > max(maxLength)) { return verification(false, false); }
+
+  return verification(true, true);
+}
+
+module.exports = cvv;
+
+},{}],99:[function(require,module,exports){
+'use strict';
+
+var parseDate = require('./parse-date');
+var expirationMonth = require('./expiration-month');
+var expirationYear = require('./expiration-year');
+
+function verification(isValid, isPotentiallyValid, month, year) {
+  return {
+    isValid: isValid,
+    isPotentiallyValid: isPotentiallyValid,
+    month: month,
+    year: year
+  };
+}
+
+function expirationDate(value) {
+  var date, monthValid, yearValid, isValidForThisYear;
+
+  if (typeof value === 'string') {
+    value = value.replace(/^(\d\d) (\d\d(\d\d)?)$/, '$1/$2');
+    date = parseDate(value);
+  } else if (value !== null && typeof value === 'object') {
+    date = {
+      month: String(value.month),
+      year: String(value.year)
+    };
+  } else {
+    return verification(false, false, null, null);
+  }
+
+  monthValid = expirationMonth(date.month);
+  yearValid = expirationYear(date.year);
+
+  if (monthValid.isValid) {
+    if (yearValid.isCurrentYear) {
+      isValidForThisYear = monthValid.isValidForThisYear;
+      return verification(isValidForThisYear, isValidForThisYear, date.month, date.year);
+    }
+
+    if (yearValid.isValid) {
+      return verification(true, true, date.month, date.year);
+    }
+  }
+
+  if (monthValid.isPotentiallyValid && yearValid.isPotentiallyValid) {
+    return verification(false, true, null, null);
+  }
+
+  return verification(false, false, null, null);
+}
+
+module.exports = expirationDate;
+
+},{"./expiration-month":100,"./expiration-year":101,"./parse-date":104}],100:[function(require,module,exports){
+'use strict';
+
+function verification(isValid, isPotentiallyValid, isValidForThisYear) {
+  return {
+    isValid: isValid,
+    isPotentiallyValid: isPotentiallyValid,
+    isValidForThisYear: isValidForThisYear || false
+  };
+}
+
+function expirationMonth(value) {
+  var month, result;
+  var currentMonth = new Date().getMonth() + 1;
+
+  if (typeof value !== 'string') {
+    return verification(false, false);
+  }
+  if (value.replace(/\s/g, '') === '' || value === '0') {
+    return verification(false, true);
+  }
+  if (!/^\d*$/.test(value)) {
+    return verification(false, false);
+  }
+
+  month = parseInt(value, 10);
+
+  if (isNaN(value)) {
+    return verification(false, false);
+  }
+
+  result = month > 0 && month < 13;
+
+  return verification(result, result, result && month >= currentMonth);
+}
+
+module.exports = expirationMonth;
+
+},{}],101:[function(require,module,exports){
+'use strict';
+
+var maxYear = 19;
+
+function verification(isValid, isPotentiallyValid, isCurrentYear) {
+  return {
+    isValid: isValid,
+    isPotentiallyValid: isPotentiallyValid,
+    isCurrentYear: isCurrentYear || false
+  };
+}
+
+function expirationYear(value) {
+  var currentFirstTwo, currentYear, firstTwo, len, twoDigitYear, valid, isCurrentYear;
+
+  if (typeof value !== 'string') {
+    return verification(false, false);
+  }
+  if (value.replace(/\s/g, '') === '') {
+    return verification(false, true);
+  }
+  if (!/^\d*$/.test(value)) {
+    return verification(false, false);
+  }
+
+  len = value.length;
+
+  if (len < 2) {
+    return verification(false, true);
+  }
+
+  currentYear = new Date().getFullYear();
+
+  if (len === 3) {
+    // 20x === 20x
+    firstTwo = value.slice(0, 2);
+    currentFirstTwo = String(currentYear).slice(0, 2);
+    return verification(false, firstTwo === currentFirstTwo);
+  }
+
+  if (len > 4) {
+    return verification(false, false);
+  }
+
+  value = parseInt(value, 10);
+  twoDigitYear = Number(String(currentYear).substr(2, 2));
+
+  if (len === 2) {
+    isCurrentYear = twoDigitYear === value;
+    valid = value >= twoDigitYear && value <= twoDigitYear + maxYear;
+  } else if (len === 4) {
+    isCurrentYear = currentYear === value;
+    valid = value >= currentYear && value <= currentYear + maxYear;
+  }
+
+  return verification(valid, valid, isCurrentYear);
+}
+
+module.exports = expirationYear;
+
+},{}],102:[function(require,module,exports){
+'use strict';
+
+// Polyfill taken from <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray#Polyfill>.
+
+module.exports = Array.isArray || function (arg) {
+  return Object.prototype.toString.call(arg) === '[object Array]';
+};
+
+},{}],103:[function(require,module,exports){
+/*
+ * Luhn algorithm implementation in JavaScript
+ * Copyright (c) 2009 Nicholas C. Zakas
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+'use strict';
+
+function luhn10(identifier) {
+  var sum = 0;
+  var alt = false;
+  var i = identifier.length - 1;
+  var num;
+
+  while (i >= 0) {
+    num = parseInt(identifier.charAt(i), 10);
+
+    if (alt) {
+      num *= 2;
+      if (num > 9) {
+        num = (num % 10) + 1; // eslint-disable-line no-extra-parens
+      }
+    }
+
+    alt = !alt;
+
+    sum += num;
+
+    i--;
+  }
+
+  return sum % 10 === 0;
+}
+
+module.exports = luhn10;
+
+},{}],104:[function(require,module,exports){
+'use strict';
+
+var expirationYear = require('./expiration-year');
+var isArray = require('./lib/is-array');
+
+function parseDate(value) {
+  var month, len, year, yearValid;
+
+  if (/\//.test(value)) {
+    value = value.split(/\s*\/\s*/g);
+  } else if (/\s/.test(value)) {
+    value = value.split(/ +/g);
+  }
+
+  if (isArray(value)) {
+    return {
+      month: value[0],
+      year: value.slice(1).join()
+    };
+  }
+
+  len = value[0] === '0' || value.length > 5 ? 2 : 1;
+
+  if (value[0] === '1') {
+    year = value.substr(1);
+    yearValid = expirationYear(year);
+    if (!yearValid.isPotentiallyValid) {
+      len = 2;
+    }
+  }
+
+  month = value.substr(0, len);
+
+  return {
+    month: month,
+    year: value.substr(month.length)
+  };
+}
+
+module.exports = parseDate;
+
+},{"./expiration-year":101,"./lib/is-array":102}],105:[function(require,module,exports){
+'use strict';
+
+var MIN_POSTAL_CODE_LENGTH = 3;
+
+function verification(isValid, isPotentiallyValid) {
+  return {isValid: isValid, isPotentiallyValid: isPotentiallyValid};
+}
+
+function postalCode(value) {
+  if (typeof value !== 'string') {
+    return verification(false, false);
+  } else if (value.length < MIN_POSTAL_CODE_LENGTH) {
+    return verification(false, true);
+  }
+
+  return verification(true, true);
+}
+
+module.exports = postalCode;
+
+},{}],106:[function(require,module,exports){
+/*!
+  Copyright (c) 2016 Jed Watson.
+  Licensed under the MIT License (MIT), see
+  http://jedwatson.github.io/classnames
+*/
+/* global define */
+
+(function () {
+	'use strict';
+
+	var hasOwn = {}.hasOwnProperty;
+
+	function classNames () {
+		var classes = [];
+
+		for (var i = 0; i < arguments.length; i++) {
+			var arg = arguments[i];
+			if (!arg) continue;
+
+			var argType = typeof arg;
+
+			if (argType === 'string' || argType === 'number') {
+				classes.push(arg);
+			} else if (Array.isArray(arg)) {
+				classes.push(classNames.apply(null, arg));
+			} else if (argType === 'object') {
+				for (var key in arg) {
+					if (hasOwn.call(arg, key) && arg[key]) {
+						classes.push(key);
+					}
+				}
+			}
+		}
+
+		return classes.join(' ');
+	}
+
+	if (typeof module !== 'undefined' && module.exports) {
+		module.exports = classNames;
+	} else if (typeof define === 'function' && typeof define.amd === 'object' && define.amd) {
+		// register as 'classnames', consistent with npm package name
+		define('classnames', [], function () {
+			return classNames;
+		});
+	} else {
+		window.classNames = classNames;
+	}
+}());
+
+},{}],107:[function(require,module,exports){
+'use strict';
+
+var types = {};
+var VISA = 'visa';
+var MASTERCARD = 'master-card';
+var AMERICAN_EXPRESS = 'american-express';
+var DINERS_CLUB = 'diners-club';
+var DISCOVER = 'discover';
+var JCB = 'jcb';
+var UNIONPAY = 'unionpay';
+var MAESTRO = 'maestro';
+var CVV = 'CVV';
+var CID = 'CID';
+var CVC = 'CVC';
+var CVN = 'CVN';
+var testOrder = [
+  VISA,
+  MASTERCARD,
+  AMERICAN_EXPRESS,
+  DINERS_CLUB,
+  DISCOVER,
+  JCB,
+  UNIONPAY,
+  MAESTRO
+];
+
+function clone(x) {
+  var prefixPattern, exactPattern, dupe;
+
+  if (!x) { return null; }
+
+  prefixPattern = x.prefixPattern.source;
+  exactPattern = x.exactPattern.source;
+  dupe = JSON.parse(JSON.stringify(x));
+  dupe.prefixPattern = prefixPattern;
+  dupe.exactPattern = exactPattern;
+
+  return dupe;
+}
+
+types[VISA] = {
+  niceType: 'Visa',
+  type: VISA,
+  prefixPattern: /^4$/,
+  exactPattern: /^4\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [16, 18, 19],
+  code: {
+    name: CVV,
+    size: 3
+  }
+};
+
+types[MASTERCARD] = {
+  niceType: 'MasterCard',
+  type: MASTERCARD,
+  prefixPattern: /^(5|5[1-5]|2|22|222|222[1-9]|2[3-6]|27[0-1]|2720)$/,
+  exactPattern: /^(5[1-5]|222[1-9]|2[3-6]|27[0-1]|2720)\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [16],
+  code: {
+    name: CVC,
+    size: 3
+  }
+};
+
+types[AMERICAN_EXPRESS] = {
+  niceType: 'American Express',
+  type: AMERICAN_EXPRESS,
+  prefixPattern: /^(3|34|37)$/,
+  exactPattern: /^3[47]\d*$/,
+  isAmex: true,
+  gaps: [4, 10],
+  lengths: [15],
+  code: {
+    name: CID,
+    size: 4
+  }
+};
+
+types[DINERS_CLUB] = {
+  niceType: 'Diners Club',
+  type: DINERS_CLUB,
+  prefixPattern: /^(3|3[0689]|30[0-5])$/,
+  exactPattern: /^3(0[0-5]|[689])\d*$/,
+  gaps: [4, 10],
+  lengths: [14],
+  code: {
+    name: CVV,
+    size: 3
+  }
+};
+
+types[DISCOVER] = {
+  niceType: 'Discover',
+  type: DISCOVER,
+  prefixPattern: /^(6|60|601|6011|65|64|64[4-9])$/,
+  exactPattern: /^(6011|65|64[4-9])\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [16, 19],
+  code: {
+    name: CID,
+    size: 3
+  }
+};
+
+types[JCB] = {
+  niceType: 'JCB',
+  type: JCB,
+  prefixPattern: /^(2|21|213|2131|1|18|180|1800|3|35)$/,
+  exactPattern: /^(2131|1800|35)\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [16],
+  code: {
+    name: CVV,
+    size: 3
+  }
+};
+
+types[UNIONPAY] = {
+  niceType: 'UnionPay',
+  type: UNIONPAY,
+  prefixPattern: /^(6|62)$/,
+  exactPattern: /^62\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [16, 17, 18, 19],
+  code: {
+    name: CVN,
+    size: 3
+  }
+};
+
+types[MAESTRO] = {
+  niceType: 'Maestro',
+  type: MAESTRO,
+  prefixPattern: /^(5|5[06-9]|6\d*)$/,
+  exactPattern: /^5[06-9]\d*$/,
+  gaps: [4, 8, 12],
+  lengths: [12, 13, 14, 15, 16, 17, 18, 19],
+  code: {
+    name: CVC,
+    size: 3
+  }
+};
+
+function creditCardType(cardNumber) {
+  var type, value, i;
+  var prefixResults = [];
+  var exactResults = [];
+
+  if (!(typeof cardNumber === 'string' || cardNumber instanceof String)) {
+    return [];
+  }
+
+  for (i = 0; i < testOrder.length; i++) {
+    type = testOrder[i];
+    value = types[type];
+
+    if (cardNumber.length === 0) {
+      prefixResults.push(clone(value));
+      continue;
+    }
+
+    if (value.exactPattern.test(cardNumber)) {
+      exactResults.push(clone(value));
+    } else if (value.prefixPattern.test(cardNumber)) {
+      prefixResults.push(clone(value));
+    }
+  }
+
+  return exactResults.length ? exactResults : prefixResults;
+}
+
+creditCardType.getTypeInfo = function (type) {
+  return clone(types[type]);
+};
+
+creditCardType.types = {
+  VISA: VISA,
+  MASTERCARD: MASTERCARD,
+  AMERICAN_EXPRESS: AMERICAN_EXPRESS,
+  DINERS_CLUB: DINERS_CLUB,
+  DISCOVER: DISCOVER,
+  JCB: JCB,
+  UNIONPAY: UNIONPAY,
+  MAESTRO: MAESTRO
+};
+
+module.exports = creditCardType;
+
+},{}],108:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1331,7 +1960,7 @@ emptyFunction.thatReturnsArgument = function (arg) {
 };
 
 module.exports = emptyFunction;
-},{}],97:[function(require,module,exports){
+},{}],109:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -1354,7 +1983,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = emptyObject;
 }).call(this,require('_process'))
 
-},{"_process":101}],98:[function(require,module,exports){
+},{"_process":113}],110:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -1413,7 +2042,7 @@ function invariant(condition, format, a, b, c, d, e, f) {
 module.exports = invariant;
 }).call(this,require('_process'))
 
-},{"_process":101}],99:[function(require,module,exports){
+},{"_process":113}],111:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -1483,7 +2112,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = warning;
 }).call(this,require('_process'))
 
-},{"./emptyFunction":96,"_process":101}],100:[function(require,module,exports){
+},{"./emptyFunction":108,"_process":113}],112:[function(require,module,exports){
 /*
 object-assign
 (c) Sindre Sorhus
@@ -1575,7 +2204,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],101:[function(require,module,exports){
+},{}],113:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -1757,7 +2386,908 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],102:[function(require,module,exports){
+},{}],114:[function(require,module,exports){
+(function webpackUniversalModuleDefinition(root, factory) {
+	if(typeof exports === 'object' && typeof module === 'object')
+		module.exports = factory(require("react"), require("classnames"));
+	else if(typeof define === 'function' && define.amd)
+		define(["react", "classnames"], factory);
+	else {
+		var a = typeof exports === 'object' ? factory(require("react"), require("classnames")) : factory(root["react"], root["classnames"]);
+		for(var i in a) (typeof exports === 'object' ? exports : root)[i] = a[i];
+	}
+})(this, function(__WEBPACK_EXTERNAL_MODULE_1__, __WEBPACK_EXTERNAL_MODULE_3__) {
+return /******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId])
+/******/ 			return installedModules[moduleId].exports;
+
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			exports: {},
+/******/ 			id: moduleId,
+/******/ 			loaded: false
+/******/ 		};
+
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+
+/******/ 		// Flag the module as loaded
+/******/ 		module.loaded = true;
+
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+
+
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "/build/";
+
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(0);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+
+	var _rules = __webpack_require__(2);
+
+	Object.defineProperty(exports, 'rules', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_rules).default;
+	  }
+	});
+
+	var _Form = __webpack_require__(9);
+
+	Object.defineProperty(exports, 'Form', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_Form).default;
+	  }
+	});
+
+	var _Input = __webpack_require__(6);
+
+	Object.defineProperty(exports, 'Input', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_Input).default;
+	  }
+	});
+
+	var _Select = __webpack_require__(7);
+
+	Object.defineProperty(exports, 'Select', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_Select).default;
+	  }
+	});
+
+	var _Textarea = __webpack_require__(8);
+
+	Object.defineProperty(exports, 'Textarea', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_Textarea).default;
+	  }
+	});
+
+	var _Button = __webpack_require__(5);
+
+	Object.defineProperty(exports, 'Button', {
+	  enumerable: true,
+	  get: function get() {
+	    return _interopRequireDefault(_Button).default;
+	  }
+	});
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/***/ },
+/* 1 */
+/***/ function(module, exports) {
+
+	module.exports = __WEBPACK_EXTERNAL_MODULE_1__;
+
+/***/ },
+/* 2 */
+/***/ function(module, exports) {
+
+	"use strict";
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.default = {};
+
+/***/ },
+/* 3 */
+/***/ function(module, exports) {
+
+	module.exports = __WEBPACK_EXTERNAL_MODULE_3__;
+
+/***/ },
+/* 4 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _noop = __webpack_require__(10);
+
+	var _noop2 = _interopRequireDefault(_noop);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Base = function (_Component) {
+	    _inherits(Base, _Component);
+
+	    function Base() {
+	        var _ref;
+
+	        var _temp, _this, _ret;
+
+	        _classCallCheck(this, Base);
+
+	        for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+	            args[_key] = arguments[_key];
+	        }
+
+	        return _ret = (_temp = (_this = _possibleConstructorReturn(this, (_ref = Base.__proto__ || Object.getPrototypeOf(Base)).call.apply(_ref, [this].concat(args))), _this), _this.onChange = function (event) {
+	            // TODO: Refactor conditions
+	            var isChecked = _this.state.isCheckbox ? !_this.state.isChecked : true;
+	            var checkboxValue = isChecked ? event.target.value : '';
+	            var value = _this.state.isCheckbox ? checkboxValue : event.target.value;
+
+	            event.persist();
+
+	            _this.setState({
+	                value: value,
+	                isChanged: true,
+	                isChecked: isChecked
+	            }, function () {
+	                _this.context.validateState(_this.props.name);
+
+	                (_this.props.onChange || _noop2.default)(event);
+	            });
+	        }, _this.onBlur = function (event) {
+	            event.persist();
+
+	            _this.setState({
+	                isUsed: true
+	            }, function () {
+	                _this.context.validateState(_this.props.name);
+
+	                (_this.props.onBlur || _noop2.default)(event);
+	            });
+	        }, _temp), _possibleConstructorReturn(_this, _ret);
+	    }
+
+	    _createClass(Base, [{
+	        key: 'componentWillReceiveProps',
+	        value: function componentWillReceiveProps(nextProps) {
+	            var _this2 = this;
+
+	            if (nextProps.value !== this.props.value) {
+	                this.setState({
+	                    value: nextProps.value,
+	                    isChanged: true
+	                }, function () {
+	                    _this2.context.validateState(_this2.props.name);
+	                });
+	            }
+	        }
+	    }, {
+	        key: 'componentWillUnmount',
+	        value: function componentWillUnmount() {
+	            this.context.unregister(this);
+	        }
+	    }]);
+
+	    return Base;
+	}(_react.Component);
+
+	Base.propTypes = {
+	    value: _react.PropTypes.string.isRequired,
+	    name: _react.PropTypes.string.isRequired,
+	    onChange: _react.PropTypes.func,
+	    onBlur: _react.PropTypes.func
+	};
+	Base.contextTypes = {
+	    register: _react.PropTypes.func.isRequired,
+	    unregister: _react.PropTypes.func.isRequired,
+	    validateState: _react.PropTypes.func.isRequired,
+	    components: _react.PropTypes.objectOf(_react.PropTypes.any),
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.array)
+	};
+	exports.default = Base;
+
+/***/ },
+/* 5 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _react2 = _interopRequireDefault(_react);
+
+	var _classnames = __webpack_require__(3);
+
+	var _classnames2 = _interopRequireDefault(_classnames);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Button = function (_Component) {
+	    _inherits(Button, _Component);
+
+	    function Button() {
+	        _classCallCheck(this, Button);
+
+	        return _possibleConstructorReturn(this, (Button.__proto__ || Object.getPrototypeOf(Button)).apply(this, arguments));
+	    }
+
+	    _createClass(Button, [{
+	        key: 'render',
+	        value: function render() {
+	            var _cx;
+
+	            var _props = this.props;
+	            var errorClassName = _props.errorClassName;
+	            var className = _props.className;
+
+	            var rest = _objectWithoutProperties(_props, ['errorClassName', 'className']);
+
+	            var isDisabled = Object.keys(this.context.errors).length;
+
+	            return _react2.default.createElement(
+	                'button',
+	                _extends({
+	                    className: (0, _classnames2.default)((_cx = {}, _defineProperty(_cx, className, !!className), _defineProperty(_cx, errorClassName, isDisabled && errorClassName), _cx)),
+	                    disabled: isDisabled
+	                }, rest),
+	                this.props.children
+	            );
+	        }
+	    }]);
+
+	    return Button;
+	}(_react.Component);
+
+	Button.propTypes = {
+	    children: _react.PropTypes.node,
+	    errorClassName: _react.PropTypes.string,
+	    className: _react.PropTypes.string
+	};
+	Button.contextTypes = {
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.array)
+	};
+	exports.default = Button;
+
+/***/ },
+/* 6 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _react2 = _interopRequireDefault(_react);
+
+	var _classnames = __webpack_require__(3);
+
+	var _classnames2 = _interopRequireDefault(_classnames);
+
+	var _rules = __webpack_require__(2);
+
+	var _rules2 = _interopRequireDefault(_rules);
+
+	var _Base2 = __webpack_require__(4);
+
+	var _Base3 = _interopRequireDefault(_Base2);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Input = function (_Base) {
+	    _inherits(Input, _Base);
+
+	    function Input(props, context) {
+	        _classCallCheck(this, Input);
+
+	        var _this = _possibleConstructorReturn(this, (Input.__proto__ || Object.getPrototypeOf(Input)).call(this, props, context));
+
+	        var isCheckbox = !!(props.type === 'checkbox' || props.type === 'radio');
+	        var checkboxValue = props.checked ? props.value : '';
+
+	        // TODO: Refactor conditions
+	        _this.state = {
+	            value: isCheckbox ? checkboxValue : props.value,
+	            isChanged: isCheckbox ? props.checked : !!props.value,
+	            isCheckbox: isCheckbox,
+	            isUsed: isCheckbox,
+	            isChecked: isCheckbox ? !!props.checked : true
+	        };
+
+	        context.register(_this);
+	        return _this;
+	    }
+
+	    _createClass(Input, [{
+	        key: 'render',
+	        value: function render() {
+	            var _cx, _cx2;
+
+	            var _props = this.props;
+	            var validations = _props.validations;
+	            var errorClassName = _props.errorClassName;
+	            var containerClassName = _props.containerClassName;
+	            var errorContainerClassName = _props.errorContainerClassName;
+	            var className = _props.className;
+
+	            var rest = _objectWithoutProperties(_props, ['validations', 'errorClassName', 'containerClassName', 'errorContainerClassName', 'className']);
+	            // TODO: Refactor conditions
+
+
+	            var isInvalid = this.state.isUsed && this.state.isChanged && !!this.context.errors[this.props.name];
+	            var value = this.state.isCheckbox ? this.props.value : this.state.value;
+	            var error = isInvalid && this.context.errors[this.props.name][0];
+	            var hint = null;
+
+	            if (isInvalid) {
+	                hint = typeof error === 'function' ? error(value, this.context.components) : _rules2.default[error].hint(value, this.context.components);
+	            }
+
+	            return _react2.default.createElement(
+	                'div',
+	                {
+	                    className: (0, _classnames2.default)((_cx = {}, _defineProperty(_cx, containerClassName, !!containerClassName), _defineProperty(_cx, errorContainerClassName, !!error && errorContainerClassName), _cx))
+	                },
+	                _react2.default.createElement('input', _extends({}, rest, {
+	                    className: (0, _classnames2.default)((_cx2 = {}, _defineProperty(_cx2, className, !!className), _defineProperty(_cx2, errorClassName, !!error && errorClassName), _cx2)),
+	                    checked: this.state.isChecked,
+	                    onChange: this.onChange,
+	                    onBlur: this.onBlur, value: value
+	                })),
+	                hint
+	            );
+	        }
+	    }]);
+
+	    return Input;
+	}(_Base3.default);
+
+	Input.propTypes = {
+	    validations: _react.PropTypes.arrayOf(_react.PropTypes.string).isRequired,
+	    errorClassName: _react.PropTypes.string,
+	    containerClassName: _react.PropTypes.string,
+	    errorContainerClassName: _react.PropTypes.string
+	};
+	Input.contextTypes = {
+	    register: _react.PropTypes.func.isRequired,
+	    unregister: _react.PropTypes.func.isRequired,
+	    validateState: _react.PropTypes.func.isRequired,
+	    components: _react.PropTypes.objectOf(_react.PropTypes.any),
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.array)
+	};
+	exports.default = Input;
+
+/***/ },
+/* 7 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _react2 = _interopRequireDefault(_react);
+
+	var _classnames = __webpack_require__(3);
+
+	var _classnames2 = _interopRequireDefault(_classnames);
+
+	var _rules = __webpack_require__(2);
+
+	var _rules2 = _interopRequireDefault(_rules);
+
+	var _Base2 = __webpack_require__(4);
+
+	var _Base3 = _interopRequireDefault(_Base2);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Select = function (_Base) {
+	    _inherits(Select, _Base);
+
+	    function Select(props, context) {
+	        _classCallCheck(this, Select);
+
+	        // TODO: Refactor conditions
+	        var _this = _possibleConstructorReturn(this, (Select.__proto__ || Object.getPrototypeOf(Select)).call(this, props, context));
+
+	        _this.state = {
+	            value: props.value,
+	            isChanged: !!props.value,
+	            isUsed: true,
+	            isChecked: true
+	        };
+
+	        context.register(_this);
+	        return _this;
+	    }
+
+	    _createClass(Select, [{
+	        key: 'render',
+	        value: function render() {
+	            var _cx, _cx2;
+
+	            var _props = this.props;
+	            var validations = _props.validations;
+	            var errorClassName = _props.errorClassName;
+	            var containerClassName = _props.containerClassName;
+	            var errorContainerClassName = _props.errorContainerClassName;
+	            var className = _props.className;
+
+	            var rest = _objectWithoutProperties(_props, ['validations', 'errorClassName', 'containerClassName', 'errorContainerClassName', 'className']);
+	            // TODO: Refactor conditions
+
+
+	            var isInvalid = this.state.isUsed && this.state.isChanged && !!this.context.errors[this.props.name];
+	            var error = isInvalid && this.context.errors[this.props.name][0];
+	            var hint = null;
+
+	            if (isInvalid) {
+	                hint = typeof error === 'function' ? error(this.state.value, this.context.components) : _rules2.default[error].hint(this.state.value, this.context.components);
+	            }
+
+	            return _react2.default.createElement(
+	                'div',
+	                {
+	                    className: (0, _classnames2.default)((_cx = {}, _defineProperty(_cx, containerClassName, !!containerClassName), _defineProperty(_cx, errorContainerClassName, !!error && errorContainerClassName), _cx))
+	                },
+	                _react2.default.createElement(
+	                    'select',
+	                    _extends({}, rest, {
+	                        className: (0, _classnames2.default)((_cx2 = {}, _defineProperty(_cx2, className, !!className), _defineProperty(_cx2, errorClassName, !!error && errorClassName), _cx2)),
+	                        value: this.state.value,
+	                        onChange: this.onChange,
+	                        onBlur: this.onBlur
+	                    }),
+	                    this.props.children
+	                ),
+	                hint
+	            );
+	        }
+	    }]);
+
+	    return Select;
+	}(_Base3.default);
+
+	Select.propTypes = {
+	    validations: _react.PropTypes.arrayOf(_react.PropTypes.string).isRequired,
+	    errorClassName: _react.PropTypes.string,
+	    containerClassName: _react.PropTypes.string,
+	    errorContainerClassName: _react.PropTypes.string
+	};
+	Select.contextTypes = {
+	    register: _react.PropTypes.func.isRequired,
+	    unregister: _react.PropTypes.func.isRequired,
+	    validateState: _react.PropTypes.func.isRequired,
+	    components: _react.PropTypes.objectOf(_react.PropTypes.any),
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.arrayOf(_react.PropTypes.oneOfType([_react.PropTypes.string, _react.PropTypes.node])))
+	};
+	exports.default = Select;
+
+/***/ },
+/* 8 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _react2 = _interopRequireDefault(_react);
+
+	var _classnames = __webpack_require__(3);
+
+	var _classnames2 = _interopRequireDefault(_classnames);
+
+	var _rules = __webpack_require__(2);
+
+	var _rules2 = _interopRequireDefault(_rules);
+
+	var _Base2 = __webpack_require__(4);
+
+	var _Base3 = _interopRequireDefault(_Base2);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Textarea = function (_Base) {
+	    _inherits(Textarea, _Base);
+
+	    function Textarea(props, context) {
+	        _classCallCheck(this, Textarea);
+
+	        var _this = _possibleConstructorReturn(this, (Textarea.__proto__ || Object.getPrototypeOf(Textarea)).call(this, props, context));
+
+	        _this.state = {
+	            value: props.value,
+	            isChanged: !!props.value,
+	            isUsed: false,
+	            isChecked: true
+	        };
+
+	        context.register(_this);
+	        return _this;
+	    }
+
+	    _createClass(Textarea, [{
+	        key: 'render',
+	        value: function render() {
+	            var _cx, _cx2;
+
+	            var _props = this.props;
+	            var validations = _props.validations;
+	            var errorClassName = _props.errorClassName;
+	            var containerClassName = _props.containerClassName;
+	            var errorContainerClassName = _props.errorContainerClassName;
+	            var className = _props.className;
+
+	            var rest = _objectWithoutProperties(_props, ['validations', 'errorClassName', 'containerClassName', 'errorContainerClassName', 'className']);
+	            // TODO: Refactor conditions
+
+
+	            var isInvalid = this.state.isUsed && this.state.isChanged && !!this.context.errors[this.props.name];
+	            var error = isInvalid && this.context.errors[this.props.name][0];
+	            var hint = null;
+
+	            if (isInvalid) {
+	                hint = typeof error === 'function' ? error(this.state.value, this.context.components) : _rules2.default[error].hint(this.state.value, this.context.components);
+	            }
+
+	            return _react2.default.createElement(
+	                'div',
+	                {
+	                    className: (0, _classnames2.default)((_cx = {}, _defineProperty(_cx, containerClassName, !!containerClassName), _defineProperty(_cx, errorContainerClassName, !!error && errorContainerClassName), _cx))
+	                },
+	                _react2.default.createElement('textarea', _extends({}, rest, {
+	                    className: (0, _classnames2.default)((_cx2 = {}, _defineProperty(_cx2, className, !!className), _defineProperty(_cx2, errorClassName, !!error && errorClassName), _cx2)),
+	                    onChange: this.onChange,
+	                    onBlur: this.onBlur,
+	                    value: this.state.value
+	                })),
+	                hint
+	            );
+	        }
+	    }]);
+
+	    return Textarea;
+	}(_Base3.default);
+
+	Textarea.propTypes = {
+	    validations: _react.PropTypes.arrayOf(_react.PropTypes.string).isRequired,
+	    errorClassName: _react.PropTypes.string,
+	    containerClassName: _react.PropTypes.string,
+	    errorContainerClassName: _react.PropTypes.string
+	};
+	Textarea.contextTypes = {
+	    register: _react.PropTypes.func.isRequired,
+	    unregister: _react.PropTypes.func.isRequired,
+	    validateState: _react.PropTypes.func.isRequired,
+	    components: _react.PropTypes.objectOf(_react.PropTypes.any),
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.array)
+	};
+	exports.default = Textarea;
+
+/***/ },
+/* 9 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	var _react = __webpack_require__(1);
+
+	var _react2 = _interopRequireDefault(_react);
+
+	var _Button = __webpack_require__(5);
+
+	var _Button2 = _interopRequireDefault(_Button);
+
+	var _Input = __webpack_require__(6);
+
+	var _Input2 = _interopRequireDefault(_Input);
+
+	var _Select = __webpack_require__(7);
+
+	var _Select2 = _interopRequireDefault(_Select);
+
+	var _Textarea = __webpack_require__(8);
+
+	var _Textarea2 = _interopRequireDefault(_Textarea);
+
+	var _rules = __webpack_require__(2);
+
+	var _rules2 = _interopRequireDefault(_rules);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+	function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+	var Form = function (_Component) {
+	    _inherits(Form, _Component);
+
+	    function Form(props) {
+	        _classCallCheck(this, Form);
+
+	        var _this = _possibleConstructorReturn(this, (Form.__proto__ || Object.getPrototypeOf(Form)).call(this, props));
+
+	        _this.getErrors = function () {
+	            return Object.keys(_this.components).reduce(function (prev, name) {
+	                var component = _this.components[name];
+	                var validations = component.props.validations;
+	                var length = validations.length;
+
+	                for (var i = 0; i < length; i += 1) {
+	                    if (!_rules2.default[validations[i]].rule(component.state.value, _this.components)) {
+	                        /* eslint-disable */
+	                        prev[name] = prev[name] || [];
+	                        prev[name].push(validations[i]);
+	                        /* eslint-enable */
+	                    }
+	                }
+
+	                return prev;
+	            }, {});
+	        };
+
+	        _this.register = function (component) {
+	            _this.components[component.props.name] = component;
+	        };
+
+	        _this.unregister = function (component) {
+	            var errors = _extends({}, _this.state.errors);
+
+	            delete _this.components[component.props.name];
+	            delete errors[component.props.name];
+
+	            _this.setState({ errors: errors });
+	        };
+
+	        _this.validateState = function () {
+	            var errors = _this.getErrors();
+
+	            _this.setState({ errors: errors });
+	        };
+
+	        _this.validate = function (name) {
+	            _this.components[name].setState({
+	                isUsed: true,
+	                isChanged: true
+	            }, _this.validateState);
+	        };
+
+	        _this.showError = function (name, error) {
+	            _this.components[name].setState({
+	                isUsed: true,
+	                isChanged: true
+	            }, function () {
+	                _this.setState({
+	                    errors: _extends({}, _this.state.errors, _defineProperty({}, name, [error]))
+	                });
+	            });
+	        };
+
+	        _this.hideError = function (name) {
+	            var errors = _extends({}, _this.state.errors);
+
+	            delete errors[name];
+
+	            _this.setState({ errors: errors });
+	        };
+
+	        _this.components = {};
+
+	        _this.state = {
+	            errors: {}
+	        };
+	        return _this;
+	    }
+
+	    _createClass(Form, [{
+	        key: 'getChildContext',
+	        value: function getChildContext() {
+	            return {
+	                register: this.register,
+	                unregister: this.unregister,
+	                validateState: this.validateState,
+	                components: this.components,
+	                errors: this.state.errors
+	            };
+	        }
+	    }, {
+	        key: 'componentDidMount',
+	        value: function componentDidMount() {
+	            this.validateState();
+	        }
+	    }, {
+	        key: 'validateAll',
+	        value: function validateAll() {
+	            var _this2 = this;
+
+	            Object.keys(this.components).forEach(function (name) {
+	                _this2.components[name].setState({
+	                    isUsed: true,
+	                    isChanged: true
+	                });
+	            });
+
+	            return this.getErrors();
+	        }
+	    }, {
+	        key: 'render',
+	        value: function render() {
+	            return _react2.default.createElement(
+	                'form',
+	                this.props,
+	                this.props.children
+	            );
+	        }
+	    }]);
+
+	    return Form;
+	}(_react.Component);
+
+	Form.propTypes = {
+	    children: _react.PropTypes.node
+	};
+	Form.childContextTypes = {
+	    register: _react.PropTypes.func.isRequired,
+	    unregister: _react.PropTypes.func.isRequired,
+	    validateState: _react.PropTypes.func.isRequired,
+	    components: _react.PropTypes.objectOf(_react.PropTypes.oneOfType([_react.PropTypes.instanceOf(_Button2.default), _react.PropTypes.instanceOf(_Input2.default), _react.PropTypes.instanceOf(_Select2.default), _react.PropTypes.instanceOf(_Textarea2.default)])),
+	    errors: _react.PropTypes.objectOf(_react.PropTypes.array)
+	};
+	exports.default = Form;
+
+/***/ },
+/* 10 */
+/***/ function(module, exports) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+
+	exports.default = function () {
+	    return '';
+	};
+
+/***/ }
+/******/ ])
+});
+;
+},{"classnames":106,"react":139}],115:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -1816,7 +3346,7 @@ var KeyEscapeUtils = {
 };
 
 module.exports = KeyEscapeUtils;
-},{}],103:[function(require,module,exports){
+},{}],116:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -1931,7 +3461,7 @@ var PooledClass = {
 module.exports = PooledClass;
 }).call(this,require('_process'))
 
-},{"./reactProdInvariant":124,"_process":101,"fbjs/lib/invariant":98}],104:[function(require,module,exports){
+},{"./reactProdInvariant":137,"_process":113,"fbjs/lib/invariant":110}],117:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -2023,7 +3553,7 @@ var React = {
 module.exports = React;
 }).call(this,require('_process'))
 
-},{"./ReactChildren":105,"./ReactClass":106,"./ReactComponent":107,"./ReactDOMFactories":110,"./ReactElement":111,"./ReactElementValidator":113,"./ReactPropTypes":116,"./ReactPureComponent":118,"./ReactVersion":119,"./onlyChild":123,"_process":101,"fbjs/lib/warning":99,"object-assign":100}],105:[function(require,module,exports){
+},{"./ReactChildren":118,"./ReactClass":119,"./ReactComponent":120,"./ReactDOMFactories":123,"./ReactElement":124,"./ReactElementValidator":126,"./ReactPropTypes":129,"./ReactPureComponent":131,"./ReactVersion":132,"./onlyChild":136,"_process":113,"fbjs/lib/warning":111,"object-assign":112}],118:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -2214,7 +3744,7 @@ var ReactChildren = {
 };
 
 module.exports = ReactChildren;
-},{"./PooledClass":103,"./ReactElement":111,"./traverseAllChildren":125,"fbjs/lib/emptyFunction":96}],106:[function(require,module,exports){
+},{"./PooledClass":116,"./ReactElement":124,"./traverseAllChildren":138,"fbjs/lib/emptyFunction":108}],119:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -2934,7 +4464,7 @@ var ReactClass = {
 module.exports = ReactClass;
 }).call(this,require('_process'))
 
-},{"./ReactComponent":107,"./ReactElement":111,"./ReactNoopUpdateQueue":114,"./ReactPropTypeLocationNames":115,"./reactProdInvariant":124,"_process":101,"fbjs/lib/emptyObject":97,"fbjs/lib/invariant":98,"fbjs/lib/warning":99,"object-assign":100}],107:[function(require,module,exports){
+},{"./ReactComponent":120,"./ReactElement":124,"./ReactNoopUpdateQueue":127,"./ReactPropTypeLocationNames":128,"./reactProdInvariant":137,"_process":113,"fbjs/lib/emptyObject":109,"fbjs/lib/invariant":110,"fbjs/lib/warning":111,"object-assign":112}],120:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -3055,7 +4585,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = ReactComponent;
 }).call(this,require('_process'))
 
-},{"./ReactNoopUpdateQueue":114,"./canDefineProperty":120,"./reactProdInvariant":124,"_process":101,"fbjs/lib/emptyObject":97,"fbjs/lib/invariant":98,"fbjs/lib/warning":99}],108:[function(require,module,exports){
+},{"./ReactNoopUpdateQueue":127,"./canDefineProperty":133,"./reactProdInvariant":137,"_process":113,"fbjs/lib/emptyObject":109,"fbjs/lib/invariant":110,"fbjs/lib/warning":111}],121:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2016-present, Facebook, Inc.
@@ -3392,7 +4922,7 @@ var ReactComponentTreeHook = {
 module.exports = ReactComponentTreeHook;
 }).call(this,require('_process'))
 
-},{"./ReactCurrentOwner":109,"./reactProdInvariant":124,"_process":101,"fbjs/lib/invariant":98,"fbjs/lib/warning":99}],109:[function(require,module,exports){
+},{"./ReactCurrentOwner":122,"./reactProdInvariant":137,"_process":113,"fbjs/lib/invariant":110,"fbjs/lib/warning":111}],122:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -3423,7 +4953,7 @@ var ReactCurrentOwner = {
 };
 
 module.exports = ReactCurrentOwner;
-},{}],110:[function(require,module,exports){
+},{}],123:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -3596,7 +5126,7 @@ var ReactDOMFactories = {
 module.exports = ReactDOMFactories;
 }).call(this,require('_process'))
 
-},{"./ReactElement":111,"./ReactElementValidator":113,"_process":101}],111:[function(require,module,exports){
+},{"./ReactElement":124,"./ReactElementValidator":126,"_process":113}],124:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -3940,7 +5470,7 @@ ReactElement.isValidElement = function (object) {
 module.exports = ReactElement;
 }).call(this,require('_process'))
 
-},{"./ReactCurrentOwner":109,"./ReactElementSymbol":112,"./canDefineProperty":120,"_process":101,"fbjs/lib/warning":99,"object-assign":100}],112:[function(require,module,exports){
+},{"./ReactCurrentOwner":122,"./ReactElementSymbol":125,"./canDefineProperty":133,"_process":113,"fbjs/lib/warning":111,"object-assign":112}],125:[function(require,module,exports){
 /**
  * Copyright 2014-present, Facebook, Inc.
  * All rights reserved.
@@ -3960,7 +5490,7 @@ module.exports = ReactElement;
 var REACT_ELEMENT_TYPE = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
 module.exports = REACT_ELEMENT_TYPE;
-},{}],113:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-present, Facebook, Inc.
@@ -4197,7 +5727,7 @@ var ReactElementValidator = {
 module.exports = ReactElementValidator;
 }).call(this,require('_process'))
 
-},{"./ReactComponentTreeHook":108,"./ReactCurrentOwner":109,"./ReactElement":111,"./canDefineProperty":120,"./checkReactTypeSpec":121,"./getIteratorFn":122,"_process":101,"fbjs/lib/warning":99}],114:[function(require,module,exports){
+},{"./ReactComponentTreeHook":121,"./ReactCurrentOwner":122,"./ReactElement":124,"./canDefineProperty":133,"./checkReactTypeSpec":134,"./getIteratorFn":135,"_process":113,"fbjs/lib/warning":111}],127:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015-present, Facebook, Inc.
@@ -4296,7 +5826,7 @@ var ReactNoopUpdateQueue = {
 module.exports = ReactNoopUpdateQueue;
 }).call(this,require('_process'))
 
-},{"_process":101,"fbjs/lib/warning":99}],115:[function(require,module,exports){
+},{"_process":113,"fbjs/lib/warning":111}],128:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -4324,7 +5854,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = ReactPropTypeLocationNames;
 }).call(this,require('_process'))
 
-},{"_process":101}],116:[function(require,module,exports){
+},{"_process":113}],129:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -4761,7 +6291,7 @@ function getClassName(propValue) {
 module.exports = ReactPropTypes;
 }).call(this,require('_process'))
 
-},{"./ReactElement":111,"./ReactPropTypeLocationNames":115,"./ReactPropTypesSecret":117,"./getIteratorFn":122,"_process":101,"fbjs/lib/emptyFunction":96,"fbjs/lib/warning":99}],117:[function(require,module,exports){
+},{"./ReactElement":124,"./ReactPropTypeLocationNames":128,"./ReactPropTypesSecret":130,"./getIteratorFn":135,"_process":113,"fbjs/lib/emptyFunction":108,"fbjs/lib/warning":111}],130:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -4778,7 +6308,7 @@ module.exports = ReactPropTypes;
 var ReactPropTypesSecret = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
 
 module.exports = ReactPropTypesSecret;
-},{}],118:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -4820,7 +6350,7 @@ _assign(ReactPureComponent.prototype, ReactComponent.prototype);
 ReactPureComponent.prototype.isPureReactComponent = true;
 
 module.exports = ReactPureComponent;
-},{"./ReactComponent":107,"./ReactNoopUpdateQueue":114,"fbjs/lib/emptyObject":97,"object-assign":100}],119:[function(require,module,exports){
+},{"./ReactComponent":120,"./ReactNoopUpdateQueue":127,"fbjs/lib/emptyObject":109,"object-assign":112}],132:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -4834,7 +6364,7 @@ module.exports = ReactPureComponent;
 'use strict';
 
 module.exports = '15.4.2';
-},{}],120:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -4863,7 +6393,7 @@ if (process.env.NODE_ENV !== 'production') {
 module.exports = canDefineProperty;
 }).call(this,require('_process'))
 
-},{"_process":101}],121:[function(require,module,exports){
+},{"_process":113}],134:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -4953,7 +6483,7 @@ function checkReactTypeSpec(typeSpecs, values, location, componentName, element,
 module.exports = checkReactTypeSpec;
 }).call(this,require('_process'))
 
-},{"./ReactComponentTreeHook":108,"./ReactPropTypeLocationNames":115,"./ReactPropTypesSecret":117,"./reactProdInvariant":124,"_process":101,"fbjs/lib/invariant":98,"fbjs/lib/warning":99}],122:[function(require,module,exports){
+},{"./ReactComponentTreeHook":121,"./ReactPropTypeLocationNames":128,"./ReactPropTypesSecret":130,"./reactProdInvariant":137,"_process":113,"fbjs/lib/invariant":110,"fbjs/lib/warning":111}],135:[function(require,module,exports){
 /**
  * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -4994,7 +6524,7 @@ function getIteratorFn(maybeIterable) {
 }
 
 module.exports = getIteratorFn;
-},{}],123:[function(require,module,exports){
+},{}],136:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -5035,7 +6565,7 @@ function onlyChild(children) {
 module.exports = onlyChild;
 }).call(this,require('_process'))
 
-},{"./ReactElement":111,"./reactProdInvariant":124,"_process":101,"fbjs/lib/invariant":98}],124:[function(require,module,exports){
+},{"./ReactElement":124,"./reactProdInvariant":137,"_process":113,"fbjs/lib/invariant":110}],137:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  * All rights reserved.
@@ -5074,7 +6604,7 @@ function reactProdInvariant(code) {
 }
 
 module.exports = reactProdInvariant;
-},{}],125:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-present, Facebook, Inc.
@@ -5253,202 +6783,387 @@ function traverseAllChildren(children, callback, traverseContext) {
 module.exports = traverseAllChildren;
 }).call(this,require('_process'))
 
-},{"./KeyEscapeUtils":102,"./ReactCurrentOwner":109,"./ReactElementSymbol":112,"./getIteratorFn":122,"./reactProdInvariant":124,"_process":101,"fbjs/lib/invariant":98,"fbjs/lib/warning":99}],126:[function(require,module,exports){
+},{"./KeyEscapeUtils":115,"./ReactCurrentOwner":122,"./ReactElementSymbol":125,"./getIteratorFn":135,"./reactProdInvariant":137,"_process":113,"fbjs/lib/invariant":110,"fbjs/lib/warning":111}],139:[function(require,module,exports){
 'use strict';
 
 module.exports = require('./lib/React');
 
-},{"./lib/React":104}],127:[function(require,module,exports){
-"use strict";
+},{"./lib/React":117}],140:[function(require,module,exports){
+'use strict';
 
 Object.defineProperty(exports, "__esModule", {
-	value: true
+    value: true
 });
 
-var _keys = require("babel-runtime/core-js/object/keys");
+var _react = require('react');
 
-var _keys2 = _interopRequireDefault(_keys);
+var _react2 = _interopRequireDefault(_react);
 
-var _defineProperty2 = require("babel-runtime/helpers/defineProperty");
+var _cardValidator = require('card-validator');
+
+var _cardValidator2 = _interopRequireDefault(_cardValidator);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+// Local scope ==================================
+//== Regular Expresions
+
+//
+// Validations Rules for forms
+// - `true` means it pass the rule
+// ==============================================
+
+// Deps =========================================
+var regex = {
+    email: /^(([^<>()\[\]\.,;:\s@\"]+(\.[^<>()\[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/i,
+    numeric: /^[-+]?(?:\d*[.])?\d+$/,
+    alpha: /^[A-Za-z]+$/i,
+    alphaNumeric: /^[0-9A-Z]+$/i,
+    name: /^[a-z\u00C0-\u02AB'´`]+\.?\s?([a-z\u00C0-\u02AB'´`]+\.?\s?)+$/i
+};
+
+// Internals ====================================
+var internals = {
+    required: {
+        rule: function rule(value) {
+            return typeof value === 'string';
+        },
+        hint: function hint() {
+            return _react2.default.createElement(
+                'span',
+                { className: 'form-error is-visible' },
+                'Required field.'
+            );
+        }
+    },
+    email: {
+        rule: function rule(value) {
+            return regex.email.test(value);
+        },
+        hint: function hint(value) {
+            return _react2.default.createElement(
+                'span',
+                { className: 'form-error is-visible' },
+                _react2.default.createElement(
+                    'b',
+                    null,
+                    value
+                ),
+                ' isnt an Email.'
+            );
+        }
+    },
+    ccNumber: {
+        rule: function rule(value) {
+            return _cardValidator2.default.number(value).isValid;
+        },
+        hint: function hint() {
+            return _react2.default.createElement(
+                'span',
+                { className: 'form-error is-visible' },
+                'Please provide a valid card number.'
+            );
+        }
+    },
+    ccExp: {
+        rule: function rule(value) {
+            return _cardValidator2.default.expirationDate(value).isValid;
+        },
+        hint: function hint() {
+            return _react2.default.createElement(
+                'span',
+                { className: 'form-error is-visible' },
+                'Invalid ',
+                _react2.default.createElement(
+                    'b',
+                    null,
+                    'Date'
+                ),
+                '.'
+            );
+        }
+    },
+    name: {
+        rule: function rule(value) {
+            return regex.name.test(value);
+        },
+        hint: function hint() {
+            return _react2.default.createElement(
+                'span',
+                { className: 'form-error is-visible' },
+                'Please provide a valid name.'
+            );
+        }
+    },
+    cvc: {
+        rule: function rule(value, components) {
+
+            var numValidation = _cardValidator2.default.number(components.ccNumber.state.value);
+            var trimVal = value.replace(/\D/g, '');
+            var size = 3;
+
+            if (numValidation.card) {
+                size = numValidation.card.code.size;
+            }
+
+            return trimVal.length === size;
+        },
+        hint: function hint(value, components) {
+
+            var numValidation = _cardValidator2.default.number(components.ccNumber.state.value);
+            var messageJSX = _react2.default.createElement(
+                'small',
+                { className: 'form-error is-visible small' },
+                'Invalid ',
+                _react2.default.createElement(
+                    'b',
+                    null,
+                    'CVC'
+                ),
+                ' code.'
+            );
+
+            if (numValidation.card) {
+                messageJSX = _react2.default.createElement(
+                    'small',
+                    { className: 'form-error is-visible small' },
+                    _react2.default.createElement(
+                        'b',
+                        null,
+                        numValidation.card.code.name
+                    ),
+                    ' code should be ',
+                    numValidation.card.code.size,
+                    ' numbers.'
+                );
+            }
+
+            return messageJSX;
+        }
+    }
+};
+
+// Export Validations ===========================
+exports.default = internals;
+
+},{"card-validator":96,"react":139}],141:[function(require,module,exports){
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+    value: true
+});
+
+var _defineProperty2 = require('babel-runtime/helpers/defineProperty');
 
 var _defineProperty3 = _interopRequireDefault(_defineProperty2);
 
-var _extends3 = require("babel-runtime/helpers/extends");
+var _extends3 = require('babel-runtime/helpers/extends');
 
 var _extends4 = _interopRequireDefault(_extends3);
 
-var _getPrototypeOf = require("babel-runtime/core-js/object/get-prototype-of");
+var _keys = require('babel-runtime/core-js/object/keys');
+
+var _keys2 = _interopRequireDefault(_keys);
+
+var _getPrototypeOf = require('babel-runtime/core-js/object/get-prototype-of');
 
 var _getPrototypeOf2 = _interopRequireDefault(_getPrototypeOf);
 
-var _classCallCheck2 = require("babel-runtime/helpers/classCallCheck");
+var _classCallCheck2 = require('babel-runtime/helpers/classCallCheck');
 
 var _classCallCheck3 = _interopRequireDefault(_classCallCheck2);
 
-var _createClass2 = require("babel-runtime/helpers/createClass");
+var _createClass2 = require('babel-runtime/helpers/createClass');
 
 var _createClass3 = _interopRequireDefault(_createClass2);
 
-var _possibleConstructorReturn2 = require("babel-runtime/helpers/possibleConstructorReturn");
+var _possibleConstructorReturn2 = require('babel-runtime/helpers/possibleConstructorReturn');
 
 var _possibleConstructorReturn3 = _interopRequireDefault(_possibleConstructorReturn2);
 
-var _inherits2 = require("babel-runtime/helpers/inherits");
+var _inherits2 = require('babel-runtime/helpers/inherits');
 
 var _inherits3 = _interopRequireDefault(_inherits2);
 
-var _react = require("react");
+var _assign = require('babel-runtime/core-js/object/assign');
+
+var _assign2 = _interopRequireDefault(_assign);
+
+var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
+
+var _validation = require('react-validation/lib/build/validation.rc');
+
+var _FormValidations = require('./FormRules/FormValidations');
+
+var _FormValidations2 = _interopRequireDefault(_FormValidations);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 // import '../css/ManageEmployees.css';
+(0, _assign2.default)(_validation.rules, _FormValidations2.default);
 
 var ManageEmployees = function (_Component) {
-	(0, _inherits3.default)(ManageEmployees, _Component);
+    (0, _inherits3.default)(ManageEmployees, _Component);
 
-	function ManageEmployees() {
-		(0, _classCallCheck3.default)(this, ManageEmployees);
+    function ManageEmployees() {
+        (0, _classCallCheck3.default)(this, ManageEmployees);
 
-		var _this = (0, _possibleConstructorReturn3.default)(this, (ManageEmployees.__proto__ || (0, _getPrototypeOf2.default)(ManageEmployees)).call(this));
+        var _this = (0, _possibleConstructorReturn3.default)(this, (ManageEmployees.__proto__ || (0, _getPrototypeOf2.default)(ManageEmployees)).call(this));
 
-		_this.renderEmployees = _this.renderEmployees.bind(_this);
-		return _this;
-	}
+        _this.renderEmployees = _this.renderEmployees.bind(_this);
+        return _this;
+    }
 
-	(0, _createClass3.default)(ManageEmployees, [{
-		key: "renderEmployees",
-		value: function renderEmployees(key) {
-			var _this2 = this;
+    (0, _createClass3.default)(ManageEmployees, [{
+        key: 'renderEmployees',
+        value: function renderEmployees(key) {
+            var _this2 = this;
 
-			var employee = this.props.employees[key];
+            var employee = this.props.employees[key];
 
-			return _react2.default.createElement(
-				"tr",
-				{ key: key },
-				_react2.default.createElement(
-					"td",
-					null,
-					_react2.default.createElement("input", { type: "text", placeholder: "Employee Name", name: "username", value: employee.username, onChange: function onChange(e) {
-							return _this2.updateEmployee(e, key);
-						} })
-				),
-				_react2.default.createElement(
-					"td",
-					null,
-					_react2.default.createElement("input", { type: "text", placeholder: "Employee Email", name: "email", value: employee.email, onChange: function onChange(e) {
-							return _this2.updateEmployee(e, key);
-						} })
-				),
-				_react2.default.createElement(
-					"td",
-					null,
-					_react2.default.createElement("i", { className: "fa fa-trash", onClick: function onClick() {
-							return _this2.deleteEmployee(key);
-						} })
-				)
-			);
-		}
-	}, {
-		key: "createEmployee",
-		value: function createEmployee(event) {
-			console.log(event);
-			event.preventDefault();
+            return _react2.default.createElement(
+                'tr',
+                { key: key },
+                _react2.default.createElement(
+                    'td',
+                    null,
+                    _react2.default.createElement('input', { type: 'text', placeholder: 'Employee Name', name: 'username', value: employee.username, onChange: function onChange(e) {
+                            return _this2.updateEmployee(e, key);
+                        } })
+                ),
+                _react2.default.createElement(
+                    'td',
+                    null,
+                    _react2.default.createElement('input', { type: 'text', placeholder: 'Employee Email', name: 'email', value: employee.email, onChange: function onChange(e) {
+                            return _this2.updateEmployee(e, key);
+                        } })
+                ),
+                _react2.default.createElement(
+                    'td',
+                    null,
+                    _react2.default.createElement('i', { className: 'fa fa-trash', onClick: function onClick() {
+                            _this2.deleteEmployee(key);
+                        } })
+                )
+            );
+        }
+    }, {
+        key: 'createEmployee',
+        value: function createEmployee(event) {
+            event.preventDefault();
 
-			var newEmployee = {
-				username: this.username.value,
-				email: this.email.value
-			};
+            if (!((0, _keys2.default)(this.username.context.errors).length > 0 && (0, _keys2.default)(this.email.context.errors).length > 0)) {
+                var newEmployee = {
+                    username: this.username.state.value,
+                    email: this.email.state.value
+                };
 
-			this.username.value = '';
-			this.email.value = '';
+                this.username.state.value = '';
+                this.email.state.value = '';
 
-			this.props.addEmployee(newEmployee);
-		}
-	}, {
-		key: "updateEmployee",
-		value: function updateEmployee(e, key) {
-			var employee = this.props.employees[key];
+                this.props.addEmployee(newEmployee);
+            }
+        }
+    }, {
+        key: 'updateEmployee',
+        value: function updateEmployee(e, key) {
+            var employee = this.props.employees[key];
+            // tale a copy of that fish and update it with the new data
+            var updatedEmployee = (0, _extends4.default)({}, employee, (0, _defineProperty3.default)({}, e.target.name, e.target.value));
 
-			// tale a copy of that fish and update it with the new data
-			var updatedEmployee = (0, _extends4.default)({}, employee, (0, _defineProperty3.default)({}, e.target.name, e.target.value));
+            console.log(updatedEmployee);
 
-			console.log(updatedEmployee);
+            this.props.updateEmployee(key, updatedEmployee);
+        }
+    }, {
+        key: 'deleteEmployee',
+        value: function deleteEmployee(key) {
+            var isDeleted = confirm('Would you like to delete the employee?');
 
-			this.props.updateEmployee(key, updatedEmployee);
-		}
-	}, {
-		key: "deleteEmployee",
-		value: function deleteEmployee(key) {
-			var isDeleted = confirm('Would you like to delete the employee?');
+            if (isDeleted) {
+                this.props.removeEmployee(key);
+            }
+        }
+    }, {
+        key: 'render',
+        value: function render() {
+            var _this3 = this;
 
-			if (isDeleted) {
-				this.props.removeEmployee(key);
-			}
-		}
-	}, {
-		key: "render",
-		value: function render() {
-			var _this3 = this;
-
-			return _react2.default.createElement(
-				"div",
-				{ className: "container employee-edit" },
-				_react2.default.createElement("link", { rel: "stylesheet", href: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" }),
-				_react2.default.createElement(
-					"table",
-					{ className: "table" },
-					_react2.default.createElement(
-						"thead",
-						null,
-						_react2.default.createElement(
-							"tr",
-							null,
-							_react2.default.createElement(
-								"th",
-								null,
-								"Name"
-							),
-							_react2.default.createElement(
-								"th",
-								null,
-								"Email"
-							),
-							_react2.default.createElement(
-								"th",
-								null,
-								"Action"
-							)
-						)
-					),
-					_react2.default.createElement(
-						"tbody",
-						null,
-						(0, _keys2.default)(this.props.employees).map(this.renderEmployees)
-					)
-				),
-				_react2.default.createElement(
-					"form",
-					{ onSubmit: function onSubmit(e) {
-							return _this3.createEmployee(e);
-						} },
-					_react2.default.createElement("input", { className: "input-field", ref: function ref(input) {
-							return _this3.username = input;
-						}, type: "text", placeholder: "Employee Name" }),
-					_react2.default.createElement("input", { className: "input-field", ref: function ref(input) {
-							return _this3.email = input;
-						}, type: "text", placeholder: "Employee Email" }),
-					_react2.default.createElement("input", { className: "btn", type: "submit", value: "Add" })
-				)
-			);
-		}
-	}]);
-	return ManageEmployees;
+            return _react2.default.createElement(
+                'div',
+                { className: 'container employee-edit' },
+                _react2.default.createElement('link', { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css' }),
+                _react2.default.createElement(
+                    'table',
+                    { className: 'table' },
+                    _react2.default.createElement(
+                        'thead',
+                        null,
+                        _react2.default.createElement(
+                            'tr',
+                            null,
+                            _react2.default.createElement(
+                                'th',
+                                null,
+                                'Name'
+                            ),
+                            _react2.default.createElement(
+                                'th',
+                                null,
+                                'Email'
+                            ),
+                            _react2.default.createElement(
+                                'th',
+                                null,
+                                'Action'
+                            )
+                        )
+                    ),
+                    _react2.default.createElement(
+                        'tbody',
+                        null,
+                        (0, _keys2.default)(this.props.employees).map(this.renderEmployees)
+                    )
+                ),
+                _react2.default.createElement(
+                    _validation.Form,
+                    { onSubmit: function onSubmit(e) {
+                            return _this3.createEmployee(e);
+                        } },
+                    _react2.default.createElement(
+                        'div',
+                        null,
+                        _react2.default.createElement(
+                            'label',
+                            null,
+                            _react2.default.createElement(_validation.Input, { className: 'input-field', ref: function ref(Name) {
+                                    _this3.username = Name;
+                                }, type: 'text', placeholder: 'Employee Name', value: '', validations: ['required', 'name'] })
+                        )
+                    ),
+                    _react2.default.createElement(
+                        'div',
+                        null,
+                        _react2.default.createElement(
+                            'label',
+                            null,
+                            _react2.default.createElement(_validation.Input, { className: 'input-field', placeholder: 'email@email.com', ref: function ref(email) {
+                                    _this3.email = email;
+                                }, name: 'email', value: '', validations: ['required', 'email'] })
+                        )
+                    ),
+                    _react2.default.createElement('input', { className: 'btn', type: 'submit', value: 'Add' })
+                )
+            );
+        }
+    }]);
+    return ManageEmployees;
 }(_react.Component);
 
 exports.default = ManageEmployees;
 
-},{"babel-runtime/core-js/object/get-prototype-of":4,"babel-runtime/core-js/object/keys":5,"babel-runtime/helpers/classCallCheck":9,"babel-runtime/helpers/createClass":10,"babel-runtime/helpers/defineProperty":11,"babel-runtime/helpers/extends":12,"babel-runtime/helpers/inherits":13,"babel-runtime/helpers/possibleConstructorReturn":14,"react":126}]},{},[127])
+},{"./FormRules/FormValidations":140,"babel-runtime/core-js/object/assign":1,"babel-runtime/core-js/object/get-prototype-of":4,"babel-runtime/core-js/object/keys":5,"babel-runtime/helpers/classCallCheck":9,"babel-runtime/helpers/createClass":10,"babel-runtime/helpers/defineProperty":11,"babel-runtime/helpers/extends":12,"babel-runtime/helpers/inherits":13,"babel-runtime/helpers/possibleConstructorReturn":14,"react":139,"react-validation/lib/build/validation.rc":114}]},{},[141])
 
 //# sourceMappingURL=maps/ManageEmployees.js.map
