@@ -21,27 +21,27 @@ const regex = {
 // Internals ====================================
 const internals = {
     required: {
-        rule: (value: string) => value.toString().trim(),
+        rule: (value) => typeof value === 'string',
         hint: () => (<span className="form-error is-visible">Required field.</span>)
     },
     email: {
-        rule: (value: string) => regex.email.test(value),
-        hint: (value: string) => (<span className="form-error is-visible"><b>{value}</b> isnt an Email.</span>)
+        rule: (value) => regex.email.test(value),
+        hint: (value) => (<span className="form-error is-visible"><b>{value}</b> isnt an Email.</span>)
     },
     ccNumber: {
-        rule: (value: string) => valid.number(value).isValid,
+        rule: (value) => valid.number(value).isValid,
         hint: () => (<span className="form-error is-visible">Please provide a valid card number.</span>)
     },
     ccExp: {
-        rule: (value: string) => valid.expirationDate(value).isValid,
+        rule: (value) => valid.expirationDate(value).isValid,
         hint: () => (<span className="form-error is-visible">Invalid <b>Date</b>.</span>)
     },
     name: {
-        rule: (value: string) => regex.name.test(value),
+        rule: (value) => regex.name.test(value),
         hint: () => (<span className="form-error is-visible">Please provide a valid name.</span>)
     },
     cvc: {
-        rule: (value: string, components: Object) => {
+        rule: (value, components) => {
 
             const numValidation = valid.number(components.ccNumber.state.value);
             const trimVal = value.replace(/\D/g, '');
@@ -53,7 +53,7 @@ const internals = {
 
             return trimVal.length === size;
         },
-        hint: (value: string, components: Object) => {
+        hint: (value, components) => {
 
             const numValidation = valid.number(components.ccNumber.state.value);
             let messageJSX = (<small className="form-error is-visible small">Invalid <b>CVC</b> code.</small>);

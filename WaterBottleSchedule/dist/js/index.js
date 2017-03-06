@@ -43418,7 +43418,7 @@ var regex = {
 var internals = {
     required: {
         rule: function rule(value) {
-            return value.toString().trim();
+            return typeof value === 'string';
         },
         hint: function hint() {
             return _react2.default.createElement(
@@ -43606,10 +43606,6 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 
-var _keys = require('babel-runtime/core-js/object/keys');
-
-var _keys2 = _interopRequireDefault(_keys);
-
 var _defineProperty2 = require('babel-runtime/helpers/defineProperty');
 
 var _defineProperty3 = _interopRequireDefault(_defineProperty2);
@@ -43617,6 +43613,10 @@ var _defineProperty3 = _interopRequireDefault(_defineProperty2);
 var _extends3 = require('babel-runtime/helpers/extends');
 
 var _extends4 = _interopRequireDefault(_extends3);
+
+var _keys = require('babel-runtime/core-js/object/keys');
+
+var _keys2 = _interopRequireDefault(_keys);
 
 var _getPrototypeOf = require('babel-runtime/core-js/object/get-prototype-of');
 
@@ -43705,18 +43705,19 @@ var ManageEmployees = function (_Component) {
     }, {
         key: 'createEmployee',
         value: function createEmployee(event) {
-            console.log(event);
             event.preventDefault();
 
-            var newEmployee = {
-                username: this.username.value,
-                email: this.email.value
-            };
+            if (!((0, _keys2.default)(this.username.context.errors).length > 0 && (0, _keys2.default)(this.email.context.errors).length > 0)) {
+                var newEmployee = {
+                    username: this.username.state.value,
+                    email: this.email.state.value
+                };
 
-            this.username.value = '';
-            this.email.value = '';
+                this.username.state.value = '';
+                this.email.state.value = '';
 
-            this.props.addEmployee(newEmployee);
+                this.props.addEmployee(newEmployee);
+            }
         }
     }, {
         key: 'updateEmployee',
@@ -43792,7 +43793,7 @@ var ManageEmployees = function (_Component) {
                             null,
                             _react2.default.createElement(_validation.Input, { className: 'input-field', ref: function ref(Name) {
                                     _this3.username = Name;
-                                }, type: 'text', value: 'Employee Name', validations: ['required', 'name'] })
+                                }, type: 'text', placeholder: 'Employee Name', value: '', validations: ['required', 'name'] })
                         )
                     ),
                     _react2.default.createElement(
@@ -43801,11 +43802,12 @@ var ManageEmployees = function (_Component) {
                         _react2.default.createElement(
                             'label',
                             null,
-                            _react2.default.createElement(_validation.Input, { className: 'input-field', value: 'email@email.com', ref: function ref(email) {
+                            _react2.default.createElement(_validation.Input, { className: 'input-field', placeholder: 'email@email.com', ref: function ref(email) {
                                     _this3.email = email;
-                                }, name: 'email', validations: ['required', 'email'] })
+                                }, name: 'email', value: '', validations: ['required', 'email'] })
                         )
-                    )
+                    ),
+                    _react2.default.createElement('input', { className: 'btn', type: 'submit', value: 'Add' })
                 )
             );
         }
