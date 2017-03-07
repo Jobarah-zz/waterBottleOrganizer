@@ -11,7 +11,9 @@ import moment from 'moment';
 
 BigCalendar.momentLocalizer(moment);
 
-let initialDay = new Date("Fri Feb 02 2017");
+const initialDay = new Date('Fri Feb 02 2017');
+let calculatedDate = initialDay;
+let index = 0;
 
 class App extends Component {
 
@@ -94,30 +96,42 @@ class App extends Component {
     Object.keys(this.state.employees).map((key)=> {
 
       const employee = this.state.employees[key];
+      calculatedDate = this.addDays(initialDay, index);
+      const _emp = {
+        title: employee.username,
+        'allDay': true,
+        'start': calculatedDate,
+        'end': calculatedDate
+      };
 
-        let _emp = {
-          title: employee.username,
-          'allDay': true,
-          'start': initialDay,
-          'end': initialDay
-        }
-
-        events.push(_emp);
-        initialDay = this.addDays(initialDay, 1);
+      events.push(_emp);
+        //  initialDay = this.addDays(initialDay, 1);
     });
 
-    return events
+    index = 0;
+
+    return events;
   }
 
   addDays(date, days) {
-    var result = new Date(date);
-    if(result.getDay() == 5) {
-      result.setDate(result.getDate() + 3);
-    } else if (result.getDay() == 6) {
+    const result = new Date(date);
+
+    result.setDate(result.getDate() + days);
+
+    if(result.getDay() === 6) {
       result.setDate(result.getDate() + 2);
-    } else{
-      result.setDate(result.getDate() + days);
+      index+=3;
+    } 
+    else {
+      if (result.getDay() === 0) {
+        result.setDate(result.getDate() + 1);
+        index+=2;
+      } 
+      else {
+        index++;
+      }
     }
+
     return result;
   }
 
@@ -126,12 +140,12 @@ class App extends Component {
      ============================================================== */
 
   render() {
-    let events = this.parseEmployeesToEvents();
+    const events = this.parseEmployeesToEvents();
+
     return (
       <div className="App">
         <div className="App-header">
-          <Header headerText="Water Bottle Schedule"></Header>
-          
+          <Header headerText="Water Bottle Schedule" />
         </div>
         
         <BigCalendar
@@ -145,7 +159,7 @@ class App extends Component {
           employees={ this.state.employees }
           updateEmployee={ this.updateEmployee }
           removeEmployee={ this.removeEmployee }
-        ></ManageEmployees>        
+        />        
       </div>
     );
   }
