@@ -43215,7 +43215,9 @@ _reactBigCalendar2.default.momentLocalizer(_moment2.default);
 // import './App.css';
 
 
-var initialDay = new Date("Fri Feb 02 2017");
+var initialDay = new Date('Fri Feb 02 2017');
+var calculatedDate = initialDay;
+var index = 0;
 
 var App = function (_Component) {
   (0, _inherits3.default)(App, _Component);
@@ -43317,17 +43319,19 @@ var App = function (_Component) {
       (0, _keys2.default)(this.state.employees).map(function (key) {
 
         var employee = _this2.state.employees[key];
-
+        calculatedDate = _this2.addDays(initialDay, index);
         var _emp = {
           title: employee.username,
           'allDay': true,
-          'start': initialDay,
-          'end': initialDay
+          'start': calculatedDate,
+          'end': calculatedDate
         };
 
         events.push(_emp);
-        initialDay = _this2.addDays(initialDay, 1);
+        //  initialDay = this.addDays(initialDay, 1);
       });
+
+      index = 0;
 
       return events;
     }
@@ -43335,13 +43339,21 @@ var App = function (_Component) {
     key: 'addDays',
     value: function addDays(date, days) {
       var result = new Date(date);
-      if (result.getDay() == 5) {
-        result.setDate(result.getDate() + 3);
-      } else if (result.getDay() == 6) {
+
+      result.setDate(result.getDate() + days);
+
+      if (result.getDay() === 6) {
         result.setDate(result.getDate() + 2);
+        index += 3;
       } else {
-        result.setDate(result.getDate() + days);
+        if (result.getDay() === 0) {
+          result.setDate(result.getDate() + 1);
+          index += 2;
+        } else {
+          index++;
+        }
       }
+
       return result;
     }
 
@@ -43353,6 +43365,7 @@ var App = function (_Component) {
     key: 'render',
     value: function render() {
       var events = this.parseEmployeesToEvents();
+
       return _react2.default.createElement(
         'div',
         { className: 'App' },
@@ -43418,7 +43431,7 @@ var regex = {
 var internals = {
     required: {
         rule: function rule(value) {
-            return typeof value === 'string';
+            return value ? value.toString().trim() : value;
         },
         hint: function hint() {
             return _react2.default.createElement(
