@@ -6826,7 +6826,7 @@ var regex = {
 var internals = {
     required: {
         rule: function rule(value) {
-            return typeof value === 'string';
+            return value ? value.toString().trim() : value;
         },
         hint: function hint() {
             return _react2.default.createElement(

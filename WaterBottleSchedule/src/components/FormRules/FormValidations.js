@@ -21,7 +21,7 @@ const regex = {
 // Internals ====================================
 const internals = {
     required: {
-        rule: (value) => typeof value === 'string',
+        rule: (value) => value ? value.toString().trim() : value,
         hint: () => (<span className="form-error is-visible">Required field.</span>)
     },
     email: {
