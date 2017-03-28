@@ -11,7 +11,7 @@ import moment from 'moment';
 
 BigCalendar.momentLocalizer(moment);
 
-const initialDay = new Date('Fri Feb 02 2017');
+const initialDay = new Date('Fri Mar 24 2017');
 let calculatedDate = initialDay;
 let index = 0;
 
