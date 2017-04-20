@@ -31,8 +31,8 @@
 // css Task ================================
     gulp.task('css', function () {
       return gulp.src(internals.src + '/css/**/*.css')
-        .pipe(concatCss("styles/bundle.css"))
-        .pipe(gulp.dest('out/'));
+        .pipe(concatCss("bundle.css"))
+        .pipe(gulp.dest('dist/'));
     });
 
 // JS Tasks =====================================
@@ -116,7 +116,7 @@
             const tasks = files.map(function (entry, index) {
                 entry = path.normalize(entry);
                 const origin = path.normalize(`${ internals.src }/components`);
-                const dest = path.normalize(`${ internals.static }/dist/js`);
+                const dest = path.normalize(`${ internals.static }/dist`);
                 const destMapping = entry.replace(origin, dest);
                 const destination = path.dirname(destMapping);
 

@@ -10,6 +10,7 @@ app.use('/', express.static(path.join(__dirname, '../dist')));
 // serve index.html for all remaining routes, in order to leave routing up to angular
 app.all("/*", function(req, res, next) {
     res.sendFile("index.html", { root: __dirname + "/../dist" });
+    console.log(__dirname);
 });
 
 app.listen(3001, '0.0.0.0');
