@@ -43215,7 +43215,7 @@ _reactBigCalendar2.default.momentLocalizer(_moment2.default);
 // import './App.css';
 
 
-var initialDay = new Date('Mon Apr 17 2017');
+var initialDay = new Date('Sun Apr 16 2017');
 var calculatedDate = initialDay;
 var index = 0;
 
@@ -43332,6 +43332,11 @@ var App = function (_Component) {
       });
 
       index = 0;
+      var calcDate = this.addDays(initialDay, this.state.employees.length);
+
+      if (initialDay === calcDate) {
+        initialDay = new Date();
+      }
 
       return events;
     }
@@ -43738,8 +43743,6 @@ var ManageEmployees = function (_Component) {
             var employee = this.props.employees[key];
             // tale a copy of that fish and update it with the new data
             var updatedEmployee = (0, _extends4.default)({}, employee, (0, _defineProperty3.default)({}, e.target.name, e.target.value));
-
-            console.log(updatedEmployee);
 
             this.props.updateEmployee(key, updatedEmployee);
         }

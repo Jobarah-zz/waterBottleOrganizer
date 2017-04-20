@@ -11,7 +11,7 @@ import moment from 'moment';
 
 BigCalendar.momentLocalizer(moment);
 
-const initialDay = new Date('Mon Apr 17 2017');
+let initialDay = new Date('Sun Apr 16 2017');
 let calculatedDate = initialDay;
 let index = 0;
 
@@ -109,6 +109,11 @@ class App extends Component {
     });
 
     index = 0;
+    let calcDate = this.addDays(initialDay, this.state.employees.length);
+
+    if (initialDay === calcDate) {
+      initialDay = new Date();
+    }
 
     return events;
   }

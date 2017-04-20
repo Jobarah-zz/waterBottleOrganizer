@@ -52,8 +52,6 @@ class ManageEmployees extends Component {
             [e.target.name]: e.target.value
         };
 
-        console.log(updatedEmployee);
-
         this.props.updateEmployee(key, updatedEmployee);
     }
 

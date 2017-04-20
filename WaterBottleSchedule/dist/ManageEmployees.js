@@ -7073,8 +7073,6 @@ var ManageEmployees = function (_Component) {
             // tale a copy of that fish and update it with the new data
             var updatedEmployee = (0, _extends4.default)({}, employee, (0, _defineProperty3.default)({}, e.target.name, e.target.value));
 
-            console.log(updatedEmployee);
-
             this.props.updateEmployee(key, updatedEmployee);
         }
     }, {
